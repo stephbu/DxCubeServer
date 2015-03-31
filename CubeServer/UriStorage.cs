@@ -13,6 +13,7 @@ namespace CubeServer
     using System.IO;
     using System.Linq;
     using System.Net;
+    using System.Net.Http.Headers;
     using System.Runtime.Serialization;
     using System.Threading.Tasks;
     using CubeServer.Contracts;
@@ -21,6 +22,11 @@ namespace CubeServer
 
     public class UriStorage : ICubeStorage
     {
+        // 0 - storage base uri
+        // 1 - setid
+        // 2 - detail id
+        // 3 - textureid
+        private const string TEXTURE_STORAGE_URI_FORMAT = "{0}/{1}/{2}/{3}.jpg";
         private readonly string storageRoot;
 
         public UriStorage(string rootUri)
@@ -38,16 +44,26 @@ namespace CubeServer
             throw new NotImplementedException();
         }
 
+        public async Task<StorageStream> GetTextureStream(string setId, string version, string detail, string textureid)
+        {
+            string textureUrl = string.Format(TEXTURE_STORAGE_URI_FORMAT, this.storageRoot, setId, detail, textureid);
+            WebRequest request = WebRequest.Create(textureUrl);
+            WebResponse response = await request.GetResponseAsync();
+
+            // Storage stream is used in a StreamResult which closes the stream for us when done
+            return new StorageStream(response.GetResponseStream(), response.ContentLength, new MediaTypeHeaderValue(response.ContentType));
+        }
+
         public async Task<T> Deserialize<T>(Uri url)
         {
-            Func<Stream,T> deserialize = sourceStream =>
-            {
-                using (StreamReader sr = new StreamReader(sourceStream))
-                using (JsonTextReader jr = new JsonTextReader(sr))
-                {
-                    return new JsonSerializer().Deserialize<T>(jr);
-                }
-            };
+            Func<Stream, T> deserialize = sourceStream =>
+                                          {
+                                              using (StreamReader sr = new StreamReader(sourceStream))
+                                              using (JsonTextReader jr = new JsonTextReader(sr))
+                                              {
+                                                  return new JsonSerializer().Deserialize<T>(jr);
+                                              }
+                                          };
 
             return await this.Get(url, deserialize);
         }
@@ -59,7 +75,7 @@ namespace CubeServer
             using (Stream stream = response.GetResponseStream())
             {
                 return perform(stream);
-            } 
+            }
         }
 
         public async Task<LoaderResults> Load()
@@ -82,7 +98,7 @@ namespace CubeServer
             }
             catch (Exception ex)
             {
-                exceptions.Add(new LoaderException("Sets",this.storageRoot, ex));
+                exceptions.Add(new LoaderException("Sets", this.storageRoot, ex));
                 results.Errors = exceptions.ToArray();
                 results.Sets = new Set[] { };
                 results.Success = false;
@@ -102,12 +118,7 @@ namespace CubeServer
 
                     Trace.WriteLine(String.Format("Discovered set {0} at {1}", set.Name, set.Url));
 
-                    Set currentSet = new Set
-                                     {
-                                         SourceUri = setMetadataUri, 
-                                         Name = set.Name
-                                     };
-                    
+                    Set currentSet = new Set { SourceUri = setMetadataUri, Name = set.Name };
 
                     List<SetVersion> versions = new List<SetVersion>();
                     foreach (int version in Enumerable.Range(setMetadata.MinimumViewport, setMetadata.MaximumViewport))
@@ -155,7 +166,7 @@ namespace CubeServer
             public string JpgTemplate { get; set; }
             public string MetadataTemplate { get; set; }
             public int TextureSubdivide { get; set; }
-            public string TexturePath { get; set; }            
+            public string TexturePath { get; set; }
         }
 
         public class SetVersionContract
@@ -183,6 +194,6 @@ namespace CubeServer
     public class SetVersion
     {
         public int Number { get; set; }
-        public OcTree<CubeBounds> Cubes { get; set; } 
+        public OcTree<CubeBounds> Cubes { get; set; }
     }
 }

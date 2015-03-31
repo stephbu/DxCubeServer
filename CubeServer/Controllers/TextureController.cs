@@ -19,7 +19,8 @@ namespace CubeServer.Controllers
         {
             try
             {
-                StorageStream textureStream = await new HttpCubeStorage().GetTextureStream(setid, version, detail, textureid);
+                ICubeStorage storage = new UriStorage("<INSERT_storage_base_url_HERE>");
+                StorageStream textureStream = await storage.GetTextureStream(setid, version, detail, textureid);
                 return new StreamResult(textureStream, this.Request);
             }
             catch (NotFoundException)
